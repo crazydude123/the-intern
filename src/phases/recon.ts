@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { Solari } from "@solarisdk/browser";
+import { Solari, SolariError } from "@solarisdk/browser";
 import { DEFAULT_SOURCES, dryFindings } from "../sources.js";
 import type { ReconFindings, SourceFinding } from "../types.js";
 import * as ui from "../ui.js";
@@ -39,17 +39,33 @@ export async function runRecon(opts: {
   }
 
   const solari = new Solari({ apiKey: process.env.SOLARI_API_KEY! });
-  const browser = await solari.launch({
-    // stealth: fingerprint patches + a headful browser on a real GPU.
-    // proxy: residential egress — required for anything that blocks bots.
-    // recording: per-session rrweb replay, downloadable after release.
-    stealth: true,
-    proxy: "us",
-    recording: true,
-  });
-  ui.ok(`browser session ${ui.bold(browser.id)} up ${ui.dim(`(${browser.version()})`)}`);
-  if (browser.proxy) {
-    ui.ok(`proxy resolved: ${browser.proxy.country} / ${browser.proxy.tier} / ${browser.proxy.timezoneId}`);
+
+  // Try the full setup first: stealth + residential proxy + session recording.
+  // Free plans return FeatureRequiresPlan — degrade to a standard session
+  // instead of dying, because the pipeline works with or without the bells.
+  let browser: Awaited<ReturnType<Solari["launch"]>>;
+  try {
+    browser = await solari.launch({
+      // stealth: fingerprint patches + a headful browser on a real GPU.
+      // proxy: residential egress — required for anything that blocks bots.
+      // recording: per-session rrweb replay, downloadable after release.
+      stealth: true,
+      proxy: "us",
+      recording: true,
+    });
+    ui.ok(`browser session ${ui.bold(browser.id)} up ${ui.dim(`(${browser.version()})`)}`);
+    if (browser.proxy) {
+      ui.ok(`proxy resolved: ${browser.proxy.country} / ${browser.proxy.tier} / ${browser.proxy.timezoneId}`);
+    }
+  } catch (err) {
+    if (err instanceof SolariError && err.code === "FeatureRequiresPlan") {
+      ui.warn(`plan doesn't include stealth/proxy/recording (${err.message.slice(0, 90)})`);
+      ui.info("degrading to a standard cloud browser session — the reading still happens");
+      browser = await solari.launch();
+      ui.ok(`browser session ${ui.bold(browser.id)} up ${ui.dim(`(${browser.version()}, standard)`)}`);
+    } else {
+      throw err;
+    }
   }
 
   const sources: SourceFinding[] = [];

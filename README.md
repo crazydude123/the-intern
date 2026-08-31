@@ -29,7 +29,7 @@ The deliverable isn't a screenshot of code. It's a **live report URL** your inte
 ## Quickstart
 
 ```bash
-git clone https://github.com/YOUR_HANDLE/the-intern.git
+git clone https://github.com/crazydude123/the-intern.git
 cd the-intern
 npm install
 

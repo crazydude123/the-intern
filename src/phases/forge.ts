@@ -25,30 +25,46 @@ export async function runForge(opts: {
   const reportPath = path.join(opts.artifactsDir, "report.html");
   await writeFile(reconJsonPath, JSON.stringify(opts.findings, null, 2), "utf8");
 
-  if (opts.dry) {
-    ui.info("dry-run: rendering the report locally with the same script the sandbox runs");
+  /** Fallback: run the same script the sandbox would run, on this machine. */
+  async function renderLocally(reason: string): Promise<ForgeResult> {
+    ui.warn(reason);
+    ui.info("falling back to a local render of the exact same report script");
     const proc = spawnSync("python3", [REPORT_PY, reconJsonPath, reportPath], { encoding: "utf8" });
     if (proc.status !== 0) {
       ui.fail(`local render failed: ${proc.stderr}`);
-      throw new Error("dry-run report render failed");
+      throw new Error("report render failed");
     }
     ui.ok(`rendered ${ui.bold(path.basename(reportPath))} — ${proc.stdout.trim()}`);
-    ui.warn("dry-run: no gateway, so no public URL. Set SOLARI_API_KEY for the real thing.");
     return {
-      sandboxId: "dry-run-local",
+      sandboxId: "local-fallback",
       reportUrl: null,
       reportPath,
       reportBytes: (await readFile(reportPath)).byteLength,
     };
   }
 
+  if (opts.dry) {
+    const result = await renderLocally("dry-run: no microVMs will be billed");
+    ui.warn("dry-run: no gateway, so no public URL. Set SOLARI_API_KEY for the real thing.");
+    return result;
+  }
+
   const pt = new SolariClient({ apiKey: process.env.SOLARI_API_KEY! });
-  const sandbox = await pt.sandboxes.create({
-    template: "base",
-    // Rolling IDLE window — resets on every use, NOT a hard deadline.
-    timeoutMs: 15 * 60_000,
-  });
+  let sandbox;
+  try {
+    sandbox = await pt.sandboxes.create({
+      template: "base",
+      // Rolling IDLE window — resets on every use, NOT a hard deadline.
+      timeoutMs: 15 * 60_000,
+    });
+  } catch (err) {
+    if (err instanceof Error && /plan|402|FeatureRequiresPlan/i.test(err.message)) {
+      return renderLocally("plan doesn't include sandboxes on this key");
+    }
+    throw err;
+  }
   ui.ok(`sandbox ${ui.bold(sandbox.sandboxId)} created`);
+  const keepAlive = process.env.INTERN_KEEP === "1" || process.argv.includes("--keep");
   const t0 = Date.now();
 
   try {
@@ -86,9 +102,16 @@ export async function runForge(opts: {
       reportBytes: html.byteLength,
     };
   } finally {
-    // kill(), not close(): close() only drops the local control channel and
-    // the VM would linger until its idle timeout. Kill is what we mean.
-    await sandbox.kill();
-    ui.ok("sandbox destroyed");
+    if (keepAlive) {
+      // Keep the VM (and its public URL) alive — for demos and posts. It
+      // still dies on its rolling idle window once you stop poking it.
+      sandbox.setTimeout(60 * 60_000).catch(() => {});
+      ui.warn("keeping the sandbox alive so the preview URL stays hot (--keep)");
+    } else {
+      // kill(), not close(): close() only drops the local control channel and
+      // the VM would linger until its idle timeout. Kill is what we mean.
+      await sandbox.kill();
+      ui.ok("sandbox destroyed");
+    }
   }
 }

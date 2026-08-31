@@ -33,13 +33,23 @@ export async function runDeliver(opts: {
     apiKey: process.env.SOLARI_API_KEY!,
     baseUrl: process.env.SOLARI_BASE_URL ?? "https://api.getsolari.com",
   });
-  const desktop: Desktop = await client.create({
-    template: "default",
-    resolution: "1280x720",
-    record: true,
-    // Rolling idle window; auto-pauses after, resets on every action.
-    timeoutMs: 10 * 60_000,
-  });
+
+  let desktop: Desktop;
+  try {
+    desktop = await client.create({
+      template: "default",
+      resolution: "1280x720",
+      record: true,
+      // Rolling idle window; auto-pauses after, resets on every action.
+      timeoutMs: 10 * 60_000,
+    });
+  } catch (err) {
+    if (err instanceof Error && /plan|402|FeatureRequiresPlan/i.test(err.message)) {
+      ui.warn("plan doesn't include desktops on this key — skipping the on-screen proof");
+      return { sessionId: "skipped (plan limit)", app: "none" };
+    }
+    throw err;
+  }
   ui.ok(`desktop session ${ui.bold(desktop.sessionId)} created`);
   ui.info(`watch live: ${ui.cyan(desktop.streamUrl)}`);
 
