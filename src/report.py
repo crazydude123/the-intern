@@ -61,8 +61,8 @@ body { background: #0a0e16; color: #dfe6f2; line-height: 1.6;
 h1 { font-size: 44px; line-height: 1.1; margin: 10px 0 8px; letter-spacing: -1px; }
 .sub { color: #8b95a7; font-size: 16px; max-width: 720px; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 36px 0; }
-.stat { background: #101726; border: 1px solid #1d2740; border-radius: 12px; padding: 16px 18px; }
-.stat b { display: block; font-size: 26px; letter-spacing: -0.5px; }
+.stat { background: #101726; border: 1px solid #1d2740; border-radius: 12px; padding: 16px 18px; overflow: hidden; }
+.stat b { display: block; font-size: 26px; letter-spacing: -0.5px; overflow-wrap: anywhere; }
 .stat span { color: #8b95a7; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
 h2 { font-size: 20px; margin: 40px 0 14px; }
 .panel { background: #101726; border: 1px solid #1d2740; border-radius: 14px; padding: 22px; }
@@ -83,6 +83,20 @@ footer { margin-top: 48px; border-top: 1px solid #1d2740; padding-top: 18px;
 a { color: #58a6ff; }
 .mode-dry .kicker::after { content: "  [DRY-RUN - SIMULATED RECON]"; color: #f0b429; }
 """
+
+
+def egress_display(raw: str):
+    """The recon egress field may be a raw ipify response like {"ip":"1.2.3.4"}.
+    Show just the IP, and label it honestly: proxy egress only if we actually
+    had a proxy (free plans run without one)."""
+    s = (raw or "").strip()
+    try:
+        obj = json.loads(s)
+        if isinstance(obj, dict) and "ip" in obj:
+            return str(obj["ip"]), "egress ip"
+    except (ValueError, TypeError):
+        pass
+    return s[:24] or "unknown", "proxy egress"
 
 
 def build(recon: dict) -> str:
@@ -122,6 +136,7 @@ def build(recon: dict) -> str:
       </div>""")
 
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    egress_val, egress_label = egress_display(recon.get("egress", ""))
     return f"""<!doctype html>
 <html lang="en" class="{'mode-dry' if mode == 'dry-run' else ''}">
 <head>
@@ -142,7 +157,7 @@ def build(recon: dict) -> str:
     <div class="stat"><b>{total_chars:,}</b><span>chars read</span></div>
     <div class="stat"><b>{words:,}</b><span>words captured</span></div>
     <div class="stat"><b>{elapsed / 1000:.1f}s</b><span>browse time</span></div>
-    <div class="stat"><b>{esc(recon.get("egress", "?")[:22])}</b><span>proxy egress</span></div>
+    <div class="stat"><b style="font-family:monospace;font-size:17px">{esc(egress_val)}</b><span>{esc(egress_label)}</span></div>
   </div>
 
   <h2>Reading volume by source</h2>
