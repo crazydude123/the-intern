@@ -1,0 +1,22 @@
+{
+  "name": "the-intern",
+  "version": "1.0.0",
+  "description": "An autonomous intern built on Solari. You're hiring a $300K intern. I built one instead.",
+  "type": "module",
+  "scripts": {
+    "intern": "tsx src/index.ts",
+    "demo": "tsx src/index.ts --demo",
+    "demo:dry": "tsx src/index.ts --demo --dry-run",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@solarisdk/browser": "^0.1.1",
+    "@solarisdk/sdk": "^0.1.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.0"
+  }
+}
