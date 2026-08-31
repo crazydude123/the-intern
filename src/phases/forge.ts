@@ -88,9 +88,9 @@ export async function runForge(opts: {
     const html = await sandbox.files.download("/tmp/intern/report.html");
     await writeFile(reportPath, html, "utf8");
 
-    // commands.run waits for exit, so background the server through a shell.
+    // Serve it as index.html so the preview URL lands straight on the report.
     await sandbox.commands.run("sh", {
-      args: ["-c", `cd /tmp/intern && nohup python3 -m http.server ${REPORT_PORT} >/dev/null 2>&1 &`],
+      args: ["-c", "cd /tmp/intern && cp report.html index.html && nohup python3 -m http.server 8000 >/dev/null 2>&1 &"],
     });
     const { url } = await sandbox.previewUrl(REPORT_PORT);
     ui.ok(`serving on port ${REPORT_PORT} → public preview URL`);
